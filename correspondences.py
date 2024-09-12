@@ -9,11 +9,11 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from typing import List, Tuple
+import cv2
+import time
 
-
-def find_correspondences(image_path1: str, image_path2: str, num_pairs: int = 10, load_size: int = 224, layer: int = 9,
-                         facet: str = 'key', bin: bool = True, thresh: float = 0.05, model_type: str = 'dino_vits8',
-                         stride: int = 4) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]],
+def find_correspondences(extractor: ViTExtractor, image1: np.ndarray, image2: np.ndarray, num_pairs: int = 10, load_size: int = 224, layer: int = 9,
+                         facet: str = 'key', bin: bool = True, thresh: float = 0.05) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]],
                                                                               Image.Image, Image.Image]:
     """
     finding point correspondences between two images.
@@ -32,11 +32,10 @@ def find_correspondences(image_path1: str, image_path2: str, num_pairs: int = 10
     """
     # extracting descriptors for each image
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    extractor = ViTExtractor(model_type, stride, device=device)
-    image1_batch, image1_pil = extractor.preprocess(image_path1, load_size)
+    image1_batch, image1_pil = extractor.preprocess_image(image1, load_size)
     descriptors1 = extractor.extract_descriptors(image1_batch.to(device), layer, facet, bin)
     num_patches1, load_size1 = extractor.num_patches, extractor.load_size
-    image2_batch, image2_pil = extractor.preprocess(image_path2, load_size)
+    image2_batch, image2_pil = extractor.preprocess_image(image2, load_size)
     descriptors2 = extractor.extract_descriptors(image2_batch.to(device), layer, facet, bin)
     num_patches2, load_size2 = extractor.num_patches, extractor.load_size
 
@@ -109,6 +108,35 @@ def find_correspondences(image_path1: str, image_path2: str, num_pairs: int = 10
         points2.append((y2_show, x2_show))
     return points1, points2, image1_pil, image2_pil
 
+def visualize_correspondences(points1: List[Tuple[float, float]], points2: List[Tuple[float, float]],
+                         image1: np.ndarray, image2: np.ndarray):
+    """
+    draw point correspondences on images.
+    :param points1: a list of (y, x) coordinates of image1, corresponding to points2.
+    :param points2: a list of (y, x) coordinates of image2, corresponding to points1.
+    :param image1: a PIL image.
+    :param image2: a PIL image.
+    :return: two figures of images with marked points.
+    """
+    assert len(points1) == len(points2), f"points lengths are incompatible: {len(points1)} != {len(points2)}."
+    num_points = len(points1)
+    if num_points > 15:
+        cmap = plt.get_cmap('tab10')
+    else:
+        cmap = ListedColormap(["red", "yellow", "blue", "lime", "magenta", "indigo", "orange", "cyan", "darkgreen",
+                               "maroon", "black", "white", "chocolate", "gray", "blueviolet"])
+    colors = np.array([cmap(x) for x in range(num_points)])
+    colors = colors[:, :3]
+    colors = (colors * 255).astype(np.uint8)
+    radius1, radius2 = 8, 1
+    for point1, point2, color in zip(points1, points2, colors):
+        y1, x1 = point1
+        image1 = cv2.circle(image1, (int(x1), int(y1)), radius1, color, 2)
+        image1 = cv2.circle(image1, (int(x1), int(y1)), radius2, color, 2)
+        y2, x2 = point2
+        image2 = cv2.circle(image2, (int(x2), int(y2)), radius1, color, 2)
+        image2 = cv2.circle(image2, (int(x2), int(y2)), radius2, color, 2)
+    return image1, image2
 
 def draw_correspondences(points1: List[Tuple[float, float]], points2: List[Tuple[float, float]],
                          image1: Image.Image, image2: Image.Image) -> Tuple[plt.Figure, plt.Figure]:
@@ -159,9 +187,12 @@ def chunk_cosine_sim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     :return: cosine similarity between all descriptors in x and all descriptors in y. Has shape of Bx1x(t_x)x(t_y) """
     result_list = []
     num_token_x = x.shape[2]
+    st = time.perf_counter()
     for token_idx in range(num_token_x):
         token = x[:, :, token_idx, :].unsqueeze(dim=2)  # Bx1x1xd'
         result_list.append(torch.nn.CosineSimilarity(dim=3)(token, y))  # Bx1xt
+    print(f"chunk_cosine_sim exec ts: {1000*(time.perf_counter()-st)} ms")
+    # TODO: This is very slow, should be optimized.
     return torch.stack(result_list, dim=2)  # Bx1x(t_x)x(t_y)
 
 

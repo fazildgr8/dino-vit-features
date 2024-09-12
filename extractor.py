@@ -1,6 +1,7 @@
 import argparse
 import torch
 import torchvision.transforms
+import numpy as np
 from torch import nn
 from torchvision import transforms
 import torch.nn.modules.utils as nn_utils
@@ -148,6 +149,23 @@ class ViTExtractor:
                     (2) the pil image in relevant dimensions
         """
         pil_image = Image.open(image_path).convert('RGB')
+        if load_size is not None:
+            pil_image = transforms.Resize(load_size, interpolation=transforms.InterpolationMode.LANCZOS)(pil_image)
+        prep = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=self.mean, std=self.std)
+        ])
+        prep_img = prep(pil_image)[None, ...]
+        return prep_img, pil_image
+    
+    def preprocess_image(self, image: np.ndarray, load_size: Union[int, Tuple[int, int]] = None) -> Tuple[torch.Tensor, Image.Image]:
+        """
+        Preprocesses an image before extraction.
+        :param image: image to be extracted.
+        :param load_size: optional. Size to resize image before the rest of preprocessing.
+        :return: a tensor of the preprocessed image.
+        """
+        pil_image = Image.fromarray(image).convert('RGB')
         if load_size is not None:
             pil_image = transforms.Resize(load_size, interpolation=transforms.InterpolationMode.LANCZOS)(pil_image)
         prep = transforms.Compose([
