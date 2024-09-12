@@ -109,7 +109,7 @@ def find_correspondences(extractor: ViTExtractor, image1: np.ndarray, image2: np
     return points1, points2, image1_pil, image2_pil
 
 def visualize_correspondences(points1: List[Tuple[float, float]], points2: List[Tuple[float, float]],
-                         image1: np.ndarray, image2: np.ndarray):
+                         image_1: np.ndarray, image_2: np.ndarray):
     """
     draw point correspondences on images.
     :param points1: a list of (y, x) coordinates of image1, corresponding to points2.
@@ -119,6 +119,8 @@ def visualize_correspondences(points1: List[Tuple[float, float]], points2: List[
     :return: two figures of images with marked points.
     """
     assert len(points1) == len(points2), f"points lengths are incompatible: {len(points1)} != {len(points2)}."
+    image1 = image_1.copy()
+    image2 = image_2.copy()
     num_points = len(points1)
     if num_points > 15:
         cmap = plt.get_cmap('tab10')
@@ -127,15 +129,16 @@ def visualize_correspondences(points1: List[Tuple[float, float]], points2: List[
                                "maroon", "black", "white", "chocolate", "gray", "blueviolet"])
     colors = np.array([cmap(x) for x in range(num_points)])
     colors = colors[:, :3]
-    colors = (colors * 255).astype(np.uint8)
+    colors = (colors * 255).astype(np.uint8).tolist()
     radius1, radius2 = 8, 1
     for point1, point2, color in zip(points1, points2, colors):
+        color = ( int (color [ 0 ]), int (color [ 1 ]), int (color [ 2 ])) 
         y1, x1 = point1
-        image1 = cv2.circle(image1, (int(x1), int(y1)), radius1, color, 2)
-        image1 = cv2.circle(image1, (int(x1), int(y1)), radius2, color, 2)
+        image1 = cv2.circle(image1, (int(x1), int(y1)), radius1, tuple(color), 2)
+        image1 = cv2.circle(image1, (int(x1), int(y1)), radius2, tuple(color), 2)
         y2, x2 = point2
-        image2 = cv2.circle(image2, (int(x2), int(y2)), radius1, color, 2)
-        image2 = cv2.circle(image2, (int(x2), int(y2)), radius2, color, 2)
+        image2 = cv2.circle(image2, (int(x2), int(y2)), radius1, tuple(color), 2)
+        image2 = cv2.circle(image2, (int(x2), int(y2)), radius2, tuple(color), 2)
     return image1, image2
 
 def draw_correspondences(points1: List[Tuple[float, float]], points2: List[Tuple[float, float]],
