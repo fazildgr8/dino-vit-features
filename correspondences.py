@@ -11,6 +11,7 @@ from matplotlib.colors import ListedColormap
 from typing import List, Tuple
 import cv2
 import time
+import faiss
 
 def find_correspondences(extractor: ViTExtractor, image1: np.ndarray, image2: np.ndarray, num_pairs: int = 10, load_size: int = 224, layer: int = 9,
                          facet: str = 'key', bin: bool = True, thresh: float = 0.05) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]],
@@ -72,7 +73,16 @@ def find_correspondences(extractor: ViTExtractor, image1: np.ndarray, image2: np
     n_clusters = min(num_pairs, len(all_keys_together))  # if not enough pairs, show all found pairs.
     length = np.sqrt((all_keys_together ** 2).sum(axis=1))[:, None]
     normalized = all_keys_together / length
-    kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(normalized)
+
+    # km = KMeans(n_clusters=n_clusters, random_state=0)
+    # kmeans = km.fit(normalized)
+    # labels = kmeans.labels_
+
+    kmeans_faiss = faiss.Kmeans(d=normalized.shape[-1], k=n_clusters, niter=300, gpu=False)
+    kmeans_faiss.train(normalized)
+    _, labels_faiss = kmeans_faiss.index.search(normalized, 1)
+    labels = labels_faiss.flatten()
+
     bb_topk_sims = np.full((n_clusters), -np.inf)
     bb_indices_to_show = np.full((n_clusters), -np.inf)
 
@@ -83,7 +93,7 @@ def find_correspondences(extractor: ViTExtractor, image1: np.ndarray, image2: np
     ranks = bb_cls_attn
 
     for k in range(n_clusters):
-        for i, (label, rank) in enumerate(zip(kmeans.labels_, ranks)):
+        for i, (label, rank) in enumerate(zip(labels, ranks)):
             if rank > bb_topk_sims[label]:
                 bb_topk_sims[label] = rank
                 bb_indices_to_show[label] = i
@@ -191,6 +201,7 @@ def chunk_cosine_sim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     result_list = []
     num_token_x = x.shape[2]
     st = time.perf_counter()
+    print(f"Num tokens for chunk cosine sim: {num_token_x}")
     for token_idx in range(num_token_x):
         token = x[:, :, token_idx, :].unsqueeze(dim=2)  # Bx1x1xd'
         result_list.append(torch.nn.CosineSimilarity(dim=3)(token, y))  # Bx1xt
