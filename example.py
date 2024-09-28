@@ -25,7 +25,7 @@ thresh=0.05 #@param
 #@markdown Choose model type:
 model_type='dino_vits8' #@param
 #@markdown Choose stride:
-stride=4 #@param
+stride=8 #@param
 
 import matplotlib.pyplot as plt
 import torch
@@ -33,7 +33,7 @@ from correspondences import find_correspondences, draw_correspondences
 
 with torch.no_grad():
     points1, points2, image1_pil, image2_pil = find_correspondences(ViTExtractor(model_type,stride), image1, image2, num_pairs, load_size, layer,
-                                                                   facet, bin, thresh)
+                                                                   facet, bin, thresh, debug=True)
 fig_1, ax1 = plt.subplots()
 ax1.axis('off')
 ax1.imshow(image1_pil)

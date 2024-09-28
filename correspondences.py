@@ -14,7 +14,7 @@ import time
 import faiss
 
 def find_correspondences(extractor: ViTExtractor, image1: np.ndarray, image2: np.ndarray, num_pairs: int = 10, load_size: int = 224, layer: int = 9,
-                         facet: str = 'key', bin: bool = True, thresh: float = 0.05) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]],
+                         facet: str = 'key', bin: bool = True, thresh: float = 0.05, debug=False) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]],
                                                                               Image.Image, Image.Image]:
     """
     finding point correspondences between two images.
@@ -31,6 +31,8 @@ def find_correspondences(extractor: ViTExtractor, image1: np.ndarray, image2: np
     :return: list of points from image_path1, list of corresponding points from image_path2, the processed pil image of
     image_path1, and the processed pil image of image_path2.
     """
+    t0 = time.perf_counter()
+
     # extracting descriptors for each image
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     image1_batch, image1_pil = extractor.preprocess_image(image1, load_size)
@@ -78,10 +80,14 @@ def find_correspondences(extractor: ViTExtractor, image1: np.ndarray, image2: np
     # kmeans = km.fit(normalized)
     # labels = kmeans.labels_
 
+    t1 = time.perf_counter()
+
     kmeans_faiss = faiss.Kmeans(d=normalized.shape[-1], k=n_clusters, niter=300, gpu=False)
     kmeans_faiss.train(normalized)
     _, labels_faiss = kmeans_faiss.index.search(normalized, 1)
     labels = labels_faiss.flatten()
+
+    t2 = time.perf_counter()
 
     bb_topk_sims = np.full((n_clusters), -np.inf)
     bb_indices_to_show = np.full((n_clusters), -np.inf)
@@ -116,6 +122,13 @@ def find_correspondences(extractor: ViTExtractor, image1: np.ndarray, image2: np
         y2_show = (int(y2) - 1) * extractor.stride[0] + extractor.stride[0] + extractor.p // 2
         points1.append((y1_show, x1_show))
         points2.append((y2_show, x2_show))
+    t3 = time.perf_counter()
+
+    if debug:
+        print(f"\nfinding correspondences took {1000*(t3-t0)} ms")
+        print(f" Time to extract descriptors: {1000*(t1-t0)} ms")
+        print(f" Time to apply k-means: {1000*(t2-t1)} ms")
+        print(f" Time rank and get result: {1000*(t3-t2)} ms")
     return points1, points2, image1_pil, image2_pil
 
 def visualize_correspondences(points1: List[Tuple[float, float]], points2: List[Tuple[float, float]],
